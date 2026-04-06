@@ -1,0 +1,27 @@
+services:
+  # CPU-only service
+  textify:
+    build: .
+    volumes:
+      - ./input:/input
+      - ./output:/output
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    # Example: docker compose run textify /input/audio.mp3 -o /output/result.json
+
+  # GPU-accelerated service (requires NVIDIA Container Toolkit)
+  textify-gpu:
+    build: .
+    volumes:
+      - ./input:/input
+      - ./output:/output
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # Example: docker compose run textify-gpu /input/audio.mp3 -d cuda -o /output/result.json

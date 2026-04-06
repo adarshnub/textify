@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model cache
+.cache/
+
+# Audio files (don't commit test audio)
+*.mp3
+*.wav
+*.flac
+*.m4a
+*.ogg
+*.wma
+
+# Output
+*.json
+!package.json
+
+# Docker
+.dockerignore
