@@ -22,6 +22,7 @@ class Segment(BaseModel):
     end: float = Field(description="Segment end time in seconds")
     text: str = Field(description="Full segment text")
     speaker: str | None = Field(default=None, description="Speaker label for the segment")
+    language: str | None = Field(default=None, description="Detected language code for this segment")
     words: list[Word] = Field(default_factory=list, description="Word-level timestamps")
 
 

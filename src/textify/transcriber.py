@@ -9,6 +9,7 @@ from typing import Callable
 from .models import Metadata, Segment, TranscriptionResult, Word
 from .utils import (
     detect_device,
+    detect_text_language,
     get_audio_duration,
     get_batch_size,
     get_compute_type,
@@ -82,19 +83,50 @@ def transcribe(
     detected_language = language or result.get("language", "en")
     _log(f"Detected language: {detected_language}", on_progress)
 
-    # Step 4: Align words for word-level timestamps
-    _log("Aligning words...", on_progress)
-    align_model, align_metadata = whisperx.load_align_model(
-        language_code=detected_language, device=device
-    )
-    result = whisperx.align(
-        result["segments"],
-        align_model,
-        align_metadata,
-        audio,
-        device,
-        return_char_alignments=False,
-    )
+    # Step 4: Detect per-segment language and align with language-specific models
+    for seg in result["segments"]:
+        seg["language"] = detect_text_language(
+            seg.get("text", ""), fallback=detected_language
+        )
+
+    # Group segments by language for separate alignment
+    lang_groups: dict[str, list[tuple[int, dict]]] = {}
+    for i, seg in enumerate(result["segments"]):
+        lang = seg["language"]
+        if lang not in lang_groups:
+            lang_groups[lang] = []
+        lang_groups[lang].append((i, seg))
+
+    all_aligned_segments: list[dict] = []
+    for lang, indexed_segs in lang_groups.items():
+        _log(f"Aligning words for language '{lang}'...", on_progress)
+        try:
+            align_model, align_metadata = whisperx.load_align_model(
+                language_code=lang, device=device
+            )
+            segs_to_align = [seg for _, seg in indexed_segs]
+            aligned = whisperx.align(
+                segs_to_align,
+                align_model,
+                align_metadata,
+                audio,
+                device,
+                return_char_alignments=False,
+            )
+            for aligned_seg in aligned.get("segments", []):
+                aligned_seg["language"] = lang
+                all_aligned_segments.append(aligned_seg)
+        except Exception as e:
+            _log(
+                f"Alignment failed for '{lang}': {e}. Keeping unaligned.",
+                on_progress,
+            )
+            for _, seg in indexed_segs:
+                all_aligned_segments.append(seg)
+
+    # Sort by start time to maintain chronological order
+    all_aligned_segments.sort(key=lambda s: s.get("start", 0.0))
+    result = {"segments": all_aligned_segments}
 
     # Step 5: Speaker diarization (optional)
     num_speakers = None
@@ -186,6 +218,7 @@ def _build_segments(raw_segments: list[dict]) -> list[Segment]:
                 end=round(seg.get("end", 0.0), 3),
                 text=seg.get("text", "").strip(),
                 speaker=seg.get("speaker"),
+                language=seg.get("language"),
                 words=words,
             )
         )

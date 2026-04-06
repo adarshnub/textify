@@ -7,6 +7,51 @@ from pathlib import Path
 
 SUPPORTED_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".wma"}
 
+# Unicode script ranges for detecting non-Latin languages
+SCRIPT_LANGUAGE_MAP = {
+    "ml": (0x0D00, 0x0D7F),  # Malayalam
+    "hi": (0x0900, 0x097F),  # Hindi (Devanagari)
+    "ta": (0x0B80, 0x0BFF),  # Tamil
+    "te": (0x0C00, 0x0C7F),  # Telugu
+    "kn": (0x0C80, 0x0CFF),  # Kannada
+    "bn": (0x0980, 0x09FF),  # Bengali
+    "gu": (0x0A80, 0x0AFF),  # Gujarati
+    "pa": (0x0A00, 0x0A7F),  # Punjabi (Gurmukhi)
+    "or": (0x0B00, 0x0B7F),  # Odia
+    "ar": (0x0600, 0x06FF),  # Arabic
+    "zh": (0x4E00, 0x9FFF),  # Chinese (CJK)
+    "ja": (0x3040, 0x309F),  # Japanese (Hiragana)
+    "ko": (0xAC00, 0xD7AF),  # Korean (Hangul)
+    "th": (0x0E00, 0x0E7F),  # Thai
+    "ru": (0x0400, 0x04FF),  # Cyrillic (Russian)
+}
+
+
+def detect_text_language(text: str, fallback: str = "en") -> str:
+    """Detect language from text using Unicode script analysis.
+
+    Reliable for languages with distinct scripts (Indian languages, CJK,
+    Arabic, etc.). Falls back to the given default for Latin-script text.
+
+    Args:
+        text: The text to analyze.
+        fallback: Language code to return for Latin-script text.
+
+    Returns:
+        ISO 639-1 language code.
+    """
+    script_counts: dict[str, int] = {}
+    for char in text:
+        code = ord(char)
+        for lang, (start, end) in SCRIPT_LANGUAGE_MAP.items():
+            if start <= code <= end:
+                script_counts[lang] = script_counts.get(lang, 0) + 1
+                break
+
+    if script_counts:
+        return max(script_counts, key=script_counts.get)
+    return fallback
+
 
 def detect_device(preferred: str = "auto") -> str:
     """Return the compute device to use.
