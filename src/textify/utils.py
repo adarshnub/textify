@@ -7,6 +7,27 @@ from pathlib import Path
 
 SUPPORTED_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".wma"}
 
+# Native script prompts to encourage Whisper to output in the correct script.
+# When Whisper sees a prompt in Malayalam script, it's far more likely to output
+# Malayalam script rather than romanized English approximations.
+NATIVE_SCRIPT_PROMPTS: dict[str, str] = {
+    "ml": "ഇത് മലയാളത്തിലുള്ള ട്രാൻസ്ക്രിപ്ഷൻ ആണ്.",
+    "hi": "यह हिंदी में ट्रांसक्रिप्शन है।",
+    "ta": "இது தமிழில் எழுதப்பட்ட டிரான்ஸ்கிரிப்ஷன்.",
+    "te": "ఇది తెలుగులో రాసిన ట్రాన్స్క్రిప్షన్.",
+    "kn": "ಇದು ಕನ್ನಡದಲ್ಲಿ ಟ್ರಾನ್ಸ್ಕ್ರಿಪ್ಶನ್.",
+    "bn": "এটি বাংলায় ট্রান্সক্রিপশন।",
+    "gu": "આ ગુજરાતીમાં ટ્રાન્સક્રિપ્શન છે.",
+    "pa": "ਇਹ ਪੰਜਾਬੀ ਵਿੱਚ ਟ੍ਰਾਂਸਕ੍ਰਿਪਸ਼ਨ ਹੈ।",
+    "or": "ଏହା ଓଡ଼ିଆରେ ଟ୍ରାନ୍ସକ୍ରିପ୍ସନ।",
+    "ar": "هذا نص مكتوب باللغة العربية.",
+    "zh": "这是中文转录文本。",
+    "ja": "これは日本語の文字起こしです。",
+    "ko": "이것은 한국어 전사본입니다.",
+    "ru": "Это транскрипция на русском языке.",
+    "th": "นี่คือการถอดความภาษาไทย",
+}
+
 # Unicode script ranges for detecting non-Latin languages
 SCRIPT_LANGUAGE_MAP = {
     "ml": (0x0D00, 0x0D7F),  # Malayalam

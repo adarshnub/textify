@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 
 import click
@@ -33,7 +34,7 @@ from .utils import validate_audio_file
     "--language",
     type=str,
     default=None,
-    help='Language code (e.g. "en", "es"). Auto-detects if not specified.',
+    help='Language code (e.g. "en"). Comma-separated for multilingual audio (e.g. "en,ml"). Auto-detects if not specified.',
 )
 @click.option(
     "--min-speakers",
@@ -121,8 +122,8 @@ def main(
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
-    # Serialize to JSON
-    json_output = result.model_dump_json(indent=2)
+    # Serialize to JSON (ensure_ascii encodes non-Latin scripts as \uXXXX)
+    json_output = json.dumps(result.model_dump(), indent=2, ensure_ascii=True)
 
     # Write output
     if output:
