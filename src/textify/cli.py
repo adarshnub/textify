@@ -123,7 +123,10 @@ def main(
         sys.exit(1)
 
     # Serialize to JSON (ensure_ascii encodes non-Latin scripts as \uXXXX)
-    json_output = json.dumps(result.model_dump(), indent=2, ensure_ascii=True)
+    # Keep non-ASCII text (e.g. Malayalam) as \uXXXX escapes in JSON.
+    json_output = json.dumps(
+        result.model_dump(), indent=2, ensure_ascii=True
+    )
 
     # Write output
     if output:

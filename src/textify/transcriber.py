@@ -9,6 +9,8 @@ from typing import Callable
 from .models import Metadata, Segment, TranscriptionResult, Word
 from .utils import (
     NATIVE_SCRIPT_PROMPTS,
+    count_latin_letters,
+    count_script_letters,
     detect_device,
     detect_text_language,
     get_audio_duration,
@@ -34,7 +36,11 @@ def _transcribe_with_prompt(pipeline, audio, language: str, prompt: str) -> dict
     segments_iter, _info = pipeline.model.transcribe(
         audio,
         language=language,
+        task="transcribe",
         initial_prompt=prompt,
+        condition_on_previous_text=False,
+        temperature=0.0,
+        beam_size=5,
         word_timestamps=True,
     )
     segments: list[dict] = []
@@ -59,12 +65,17 @@ def _transcribe_with_prompt(pipeline, audio, language: str, prompt: str) -> dict
 
 def _do_transcribe(pipeline, audio, batch_size: int, language: str,
                    on_progress: Callable[[str], None] | None = None) -> dict:
-    """Transcribe with native-script prompt when available, else WhisperX."""
-    prompt = NATIVE_SCRIPT_PROMPTS.get(language)
-    if prompt:
-        _log(f"Using native script prompt for '{language}'", on_progress)
-        return _transcribe_with_prompt(pipeline, audio, language, prompt)
+    """Transcribe with WhisperX defaults for the requested language.
+
+    We intentionally do a normal pass first. Prompted decoding is used as a
+    fallback only when output looks romanized/Latin-heavy.
+    """
     return pipeline.transcribe(audio, batch_size=batch_size, language=language)
+
+
+def _all_text(result: dict) -> str:
+    """Join segment texts for language-quality heuristics."""
+    return " ".join(seg.get("text", "") for seg in result.get("segments", []))
 
 
 def transcribe(
@@ -159,12 +170,24 @@ def transcribe(
         detected_language = primary_lang
 
     else:
+        # Single explicit code (e.g. ml) vs auto-detect
+        single_forced_lang = (
+            language.strip()
+            if language and "," not in language
+            else None
+        )
+
         # --- Auto-detect or single forced language ---
-        if language:
+        if single_forced_lang:
             # User forced a single language (e.g. --language ml)
-            _log(f"Transcribing with language '{language}'...", on_progress)
-            result = _do_transcribe(model, audio, batch_size, language, on_progress)
-            detected_language = language
+            _log(
+                f"Transcribing with language '{single_forced_lang}'...",
+                on_progress,
+            )
+            result = _do_transcribe(
+                model, audio, batch_size, single_forced_lang, on_progress
+            )
+            detected_language = single_forced_lang
         else:
             # Full auto-detect
             _log("Transcribing (auto-detecting language)...", on_progress)
@@ -178,13 +201,17 @@ def transcribe(
             if detected_language != "en":
                 prompt = NATIVE_SCRIPT_PROMPTS.get(detected_language)
                 if prompt:
-                    all_text = " ".join(
-                        seg.get("text", "") for seg in result.get("segments", [])
-                    )
+                    all_text = _all_text(result)
                     text_lang = detect_text_language(all_text, fallback="en")
-                    if text_lang != detected_language:
+                    latin = count_latin_letters(all_text)
+                    native = count_script_letters(all_text, detected_language)
+                    # Whisper may detect "ml" but still emit English plus a little
+                    # garbage in-script; script-based detection then wrongly skips
+                    # the native-script re-pass.
+                    mostly_latin = latin > native and latin >= 8
+                    if text_lang != detected_language or mostly_latin:
                         _log(
-                            f"Output is romanized — re-transcribing with "
+                            f"Output looks romanized — re-transcribing with "
                             f"native '{detected_language}' script prompt...",
                             on_progress,
                         )
@@ -192,11 +219,34 @@ def transcribe(
                             model, audio, detected_language, prompt
                         )
 
-        # Tag every segment with its detected language
-        for seg in result.get("segments", []):
-            seg["language"] = detect_text_language(
-                seg.get("text", ""), fallback=detected_language
-            )
+        # Safety net for single forced non-English languages:
+        # if output still looks mostly Latin, re-run with native prompt.
+        if single_forced_lang and single_forced_lang != "en":
+            prompt = NATIVE_SCRIPT_PROMPTS.get(single_forced_lang)
+            if prompt:
+                all_text = _all_text(result)
+                latin = count_latin_letters(all_text)
+                native = count_script_letters(all_text, single_forced_lang)
+                if latin > native and latin >= 8:
+                    _log(
+                        f"Forced language '{single_forced_lang}' produced mostly "
+                        "Latin output — retrying with stricter native decoding...",
+                        on_progress,
+                    )
+                    result = _transcribe_with_prompt(
+                        model, audio, single_forced_lang, prompt
+                    )
+
+        # Tag segment language: if user forced one language, keep labels
+        # consistent; otherwise infer from script (code-switching).
+        if single_forced_lang:
+            for seg in result.get("segments", []):
+                seg["language"] = single_forced_lang
+        else:
+            for seg in result.get("segments", []):
+                seg["language"] = detect_text_language(
+                    seg.get("text", ""), fallback=detected_language
+                )
 
         # Auto gap-fill: if there are large uncovered regions, try the
         # "other" major language (English ↔ detected non-English)

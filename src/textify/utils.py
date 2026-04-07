@@ -48,6 +48,19 @@ SCRIPT_LANGUAGE_MAP = {
 }
 
 
+def count_latin_letters(text: str) -> int:
+    """Count A–Z / a–z letters (for romanization vs native-script heuristics)."""
+    return sum(1 for c in text if ("A" <= c <= "Z") or ("a" <= c <= "z"))
+
+
+def count_script_letters(text: str, lang: str) -> int:
+    """Count letters in the Unicode block for ``lang`` (e.g. Malayalam)."""
+    if lang not in SCRIPT_LANGUAGE_MAP:
+        return 0
+    start, end = SCRIPT_LANGUAGE_MAP[lang]
+    return sum(1 for c in text if start <= ord(c) <= end)
+
+
 def detect_text_language(text: str, fallback: str = "en") -> str:
     """Detect language from text using Unicode script analysis.
 
